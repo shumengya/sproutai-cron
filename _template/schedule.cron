@@ -1,0 +1,9 @@
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HOME=/root
+CRON_MAIL_ENABLED=1
+
+# 每天 08:00 输出 hello world（示例任务，复制本目录创建新任务）
+# 将本文件复制到 /etc/cron.d/_template 即可生效（cronctl enable 会自动同步）
+# 开关：python3 /shumengya/project/agent/sproutclaw-cron/cronctl.py enable|disable|toggle _template
+0 8 * * * root /usr/bin/python3 /shumengya/project/agent/sproutclaw-cron/cronctl.py run _template >/dev/null 2>&1

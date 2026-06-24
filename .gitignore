@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 虚拟环境
+.venv/
+
+# 运行时产物
+logs/
+*.lock
+*.log
+
+# 禁用任务目录（含本机专属脚本/凭据，不上传）
+.disabled/
+
+# 本地任务运行产物
+smallmengya-gitea-repo-sync/__pycache__/
+smallmengya-gitea-repo-sync/logs/
+smallmengya-gitea-repo-sync/*.lock
+
+# 编辑器 / IDE / 工具
+.claude/
+.idea/
+.vscode/
+*.swp
+.DS_Store

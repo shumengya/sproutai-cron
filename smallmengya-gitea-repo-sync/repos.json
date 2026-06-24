@@ -1,0 +1,21 @@
+[
+  {"repo": "shumengya/ai-translate",         "local": "/shumengya/project/cloudflare/ai-translate"},
+  {"repo": "shumengya/cf-doh",               "local": "/shumengya/project/cloudflare/cf-doh"},
+  {"repo": "shumengya/cf-favicon",           "local": "/shumengya/project/cloudflare/cf-favicon"},
+  {"repo": "shumengya/cf-ip-geo",            "local": "/shumengya/project/cloudflare/cf-ip-geo"},
+  {"repo": "shumengya/mengya-nav",           "local": "/shumengya/project/cloudflare/mengya-nav"},
+  {"repo": "shumengya/InfoGenie",            "local": "/shumengya/project/frontend-backend/InfoGenie"},
+  {"repo": "shumengya/mengyaconnect",        "local": "/shumengya/project/frontend-backend/mengyaconnect"},
+  {"repo": "shumengya/mengyadriftbottle",    "local": "/shumengya/project/frontend-backend/mengyadriftbottle"},
+  {"repo": "shumengya/mengyakeyvault",       "local": "/shumengya/project/frontend-backend/mengyakeyvault"},
+  {"repo": "shumengya/mengyalinkfly",        "local": "/shumengya/project/frontend-backend/mengyalinkfly"},
+  {"repo": "shumengya/mengyamonitor",        "local": "/shumengya/project/frontend-backend/mengyamonitor"},
+  {"repo": "shumengya/mengyanote",           "local": "/shumengya/project/frontend-backend/mengyanote"},
+  {"repo": "shumengya/mengpost",             "local": "/shumengya/project/frontend-backend/mengpost"},
+  {"repo": "shumengya/mengyaping",           "local": "/shumengya/project/frontend-backend/mengyaping"},
+  {"repo": "shumengya/mengyaprofile",        "local": "/shumengya/project/frontend-backend/mengyaprofile"},
+  {"repo": "shumengya/mengyastore",          "local": "/shumengya/project/frontend-backend/mengyastore"},
+  {"repo": "shumengya/SproutGate",           "local": "/shumengya/project/frontend-backend/SproutGate"},
+  {"repo": "shumengya/SmyWorkCollect",       "local": "/shumengya/project/frontend-backend/SproutWorkCollect"},
+  {"repo": "shumengya/random-background-api","local": "/shumengya/project/frontend/random-background-api"}
+]

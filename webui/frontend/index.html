@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SproutClaw Cron · 定时任务管理</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar" aria-label="主导航">
+      <div class="brand">
+        <div class="brand-text">
+          <h1>SproutClaw Cron</h1>
+          <p>定时任务管理面板</p>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button type="button" class="nav-item active" data-view="tasks">
+          <span class="nav-dot" aria-hidden="true"></span>
+          <span>任务清单</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <button type="button" class="btn btn-ghost btn-block" id="btn-refresh">刷新列表</button>
+      </div>
+    </aside>
+
+    <div class="overlay" id="overlay" hidden></div>
+
+    <main class="main">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" id="menu-toggle" aria-label="打开菜单">菜单</button>
+        <div class="masthead">
+          <h2>定时任务管理</h2>
+          <p class="masthead-meta" id="summary-text">加载中…</p>
+        </div>
+        <button type="button" class="btn btn-primary" id="btn-refresh-top">刷新</button>
+      </header>
+
+      <section class="document">
+        <div class="doc-meta" id="stats" aria-live="polite"></div>
+
+        <div class="toolbar">
+          <div class="search">
+            <input type="search" id="filter" placeholder="按任务名或说明过滤…" autocomplete="off" />
+          </div>
+          <span class="last-refresh" id="last-refresh"></span>
+        </div>
+
+        <section class="doc-section">
+          <div class="section-head">
+            <h3>任务清单</h3>
+          </div>
+
+          <div class="table-wrap">
+            <table class="task-table" id="task-table">
+              <thead>
+                <tr>
+                  <th class="col-status">状态</th>
+                  <th class="col-name">任务</th>
+                  <th class="col-schedule">调度</th>
+                  <th class="col-log">日志</th>
+                  <th class="col-actions">操作</th>
+                </tr>
+              </thead>
+              <tbody id="task-body">
+                <tr><td colspan="5" class="empty">加载中…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="task-cards" id="task-cards" aria-label="任务列表"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog class="log-dialog" id="log-dialog">
+    <div class="log-dialog-head">
+      <div class="log-dialog-title">
+        <span class="kicker">运行日志</span>
+        <h3 id="log-title">任务日志</h3>
+        <p id="log-subtitle"></p>
+      </div>
+      <div class="log-dialog-actions">
+        <button type="button" class="btn btn-ghost" id="btn-log-refresh">刷新日志</button>
+        <button type="button" class="btn" id="btn-log-close">关闭</button>
+      </div>
+    </div>
+    <pre class="log-content" id="log-content"></pre>
+  </dialog>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
