@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 
-from shumengya_cron.manager import (
+from manager import (
     cron_root,
     get_context,
     iter_task_ids,
@@ -18,7 +18,7 @@ from shumengya_cron.manager import (
     set_task_state,
     sync_cron_d,
 )
-from shumengya_cron.runner import task_enabled_text, task_is_enabled
+from runner import task_enabled_text, task_is_enabled
 
 
 CRON_ROOT = cron_root()
@@ -81,7 +81,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if action == "run":
                 task_rc = run_task(task_id, CRON_ROOT)
-                print(f"▶ {task_id} (exit={task_rc})")
+                marker = ">" if sys.platform == "win32" else "▶"
+                print(f"{marker} {task_id} (exit={task_rc})")
                 if task_rc != 0:
                     rc = task_rc
                 continue

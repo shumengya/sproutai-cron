@@ -17,16 +17,17 @@ FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 
 sys.path.insert(0, str(CRON_ROOT / "lib"))
 
-from shumengya_cron.manager import (  # noqa: E402
+from manager import (  # noqa: E402
     build_task_info,
     list_tasks,
     read_log_tail,
     set_task_state,
     sync_cron_d,
     toggle_task,
+    update_task_schedule,
 )
-from shumengya_cron.manager import get_context  # noqa: E402
-from shumengya_cron.runner import task_is_enabled  # noqa: E402
+from manager import get_context  # noqa: E402
+from runner import task_is_enabled  # noqa: E402
 
 app = FastAPI(title="SproutClaw Cron", version="1.0.0")
 
@@ -45,6 +46,18 @@ class RunResponse(BaseModel):
     pid: int | None = None
 
 
+class ScheduleUpdate(BaseModel):
+    description: str = ""
+    schedule: str
+    tags: list[str] = []
+
+
+class ScheduleUpdateResponse(BaseModel):
+    ok: bool = True
+    message: str = ""
+    task: dict[str, object]
+
+
 def _task_not_found(exc: FileNotFoundError) -> HTTPException:
     return HTTPException(status_code=404, detail=str(exc))
 
@@ -60,6 +73,13 @@ def _cleanup_run_job(task_id: str, proc: subprocess.Popen[bytes]) -> None:
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/runtimes")
+def api_runtimes() -> list[dict[str, object]]:
+    from runtime_probe import probe_all_runtimes
+
+    return probe_all_runtimes()
 
 
 @app.get("/api/tasks")
@@ -110,6 +130,27 @@ def api_sync_cron(task_id: str) -> MessageResponse:
         return MessageResponse(message=message)
     except FileNotFoundError as exc:
         raise _task_not_found(exc) from exc
+
+
+@app.patch("/api/tasks/{task_id}/schedule", response_model=ScheduleUpdateResponse)
+def api_update_schedule(task_id: str, body: ScheduleUpdate) -> ScheduleUpdateResponse:
+    try:
+        info, message = update_task_schedule(
+            task_id,
+            description=body.description,
+            schedule=body.schedule,
+            tags=body.tags,
+            root=CRON_ROOT,
+            sync=True,
+        )
+        return ScheduleUpdateResponse(
+            message=message or "已保存",
+            task=info.to_dict(),
+        )
+    except FileNotFoundError as exc:
+        raise _task_not_found(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/tasks/{task_id}/run", response_model=RunResponse)

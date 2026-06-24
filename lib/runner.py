@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import os
 import sys
 from contextlib import contextmanager
@@ -16,6 +15,8 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Callable, Iterator, TextIO
+
+from cron_platform import lock_ex_nb, unlock
 
 
 class LogMode(str, Enum):
@@ -26,8 +27,8 @@ class LogMode(str, Enum):
 
 
 def _cron_root() -> Path:
-    # .../lib/shumengya_cron/runner.py -> cron 根目录
-    return Path(__file__).resolve().parents[2]
+    # .../lib/runner.py -> cron 根目录
+    return Path(__file__).resolve().parents[1]
 
 
 DISABLED_DIR_NAME = ".disabled"
@@ -184,7 +185,7 @@ def acquire_cron_lock(
 ) -> Iterator[bool]:
     """
     获取互斥锁；若已被占用则记录日志并 yield False（调用方应 sys.exit(0)）。
-    使用 flock（与 bash 版一致）。
+    Linux 使用 flock；Windows 使用 msvcrt 文件锁。
     """
     msg = busy_message or os.environ.get(
         "CRON_LOCK_BUSY_MSG", "已有同名任务在运行，跳过本次。"
@@ -193,17 +194,14 @@ def acquire_cron_lock(
     fd = os.open(str(lock_file), os.O_RDWR | os.O_CREAT, 0o644)
     try:
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lock_ex_nb(fd)
         except BlockingIOError:
             log(msg)
             yield False
             return
         yield True
     finally:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        except OSError:
-            pass
+        unlock(fd)
         os.close(fd)
 
 

@@ -1,0 +1,8 @@
+{
+  "runtime": "bash",
+  "entry": "run.sh",
+  "tags": [
+    "Bash",
+    "模板"
+  ]
+}

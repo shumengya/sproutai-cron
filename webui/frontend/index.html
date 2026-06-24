@@ -8,54 +8,34 @@
 </head>
 <body>
   <div class="layout">
-    <aside class="sidebar" id="sidebar" aria-label="主导航">
-      <div class="brand">
-        <div class="brand-text">
-          <h1>SproutClaw Cron</h1>
-          <p>定时任务管理面板</p>
-        </div>
-      </div>
-
-      <nav class="sidebar-nav">
-        <button type="button" class="nav-item active" data-view="tasks">
-          <span class="nav-dot" aria-hidden="true"></span>
-          <span>任务清单</span>
-        </button>
-      </nav>
-
-      <div class="sidebar-foot">
-        <button type="button" class="btn btn-ghost btn-block" id="btn-refresh">刷新列表</button>
-      </div>
-    </aside>
-
-    <div class="overlay" id="overlay" hidden></div>
-
     <main class="main">
       <header class="topbar">
-        <button type="button" class="menu-toggle" id="menu-toggle" aria-label="打开菜单">菜单</button>
         <div class="masthead">
-          <h2>定时任务管理</h2>
+          <p class="brand-kicker">SproutClaw Cron</p>
+          <h1>定时任务管理</h1>
           <p class="masthead-meta" id="summary-text">加载中…</p>
         </div>
-        <button type="button" class="btn btn-primary" id="btn-refresh-top">刷新</button>
+        <button type="button" class="btn btn-primary" id="btn-refresh-top" aria-label="刷新">刷新</button>
       </header>
 
       <section class="document">
-        <div class="doc-meta" id="stats" aria-live="polite"></div>
+        <div class="runtime-grid" id="runtimes" aria-label="本机运行时环境"></div>
+
+        <div class="stats-grid" id="stats" aria-live="polite"></div>
 
         <div class="toolbar">
           <div class="search">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
             <input type="search" id="filter" placeholder="按任务名或说明过滤…" autocomplete="off" />
           </div>
           <span class="last-refresh" id="last-refresh"></span>
         </div>
 
         <section class="doc-section">
-          <div class="section-head">
-            <h3>任务清单</h3>
-          </div>
-
-          <div class="table-wrap">
+          <div class="table-card">
             <table class="task-table" id="task-table">
               <thead>
                 <tr>
@@ -78,6 +58,109 @@
     </main>
   </div>
 
+  <dialog class="panel-dialog" id="edit-dialog">
+    <form class="edit-form" id="edit-form">
+      <div class="panel-dialog-head">
+        <div class="panel-dialog-title">
+          <span class="kicker">编辑任务</span>
+          <h3 id="edit-title">任务</h3>
+        </div>
+        <button type="button" class="btn btn-ghost" id="btn-edit-close">关闭</button>
+      </div>
+      <div class="panel-dialog-body">
+        <label class="form-field">
+          <span class="form-label">任务描述</span>
+          <textarea id="edit-description" rows="3" placeholder="说明此任务的用途…"></textarea>
+        </label>
+        <fieldset class="tag-editor">
+          <legend class="form-label">标签</legend>
+          <p class="form-hint">最多 4 个，含运行时标签（如 Python、JavaScript）</p>
+          <div class="tag-list" id="edit-tags"></div>
+          <div class="tag-add-row">
+            <input type="text" id="edit-tag-input" maxlength="32" placeholder="输入标签后回车或点击添加…" autocomplete="off" />
+            <button type="button" class="btn btn-ghost" id="btn-tag-add">添加</button>
+          </div>
+        </fieldset>
+        <fieldset class="cron-editor">
+          <legend class="form-label">执行调度</legend>
+          <div class="cron-grid">
+            <label class="cron-field">
+              <span class="cron-field-label">分</span>
+              <input type="text" id="edit-minute" inputmode="numeric" placeholder="*" autocomplete="off" />
+            </label>
+            <label class="cron-field">
+              <span class="cron-field-label">时</span>
+              <input type="text" id="edit-hour" inputmode="numeric" placeholder="*" autocomplete="off" />
+            </label>
+            <label class="cron-field">
+              <span class="cron-field-label">日</span>
+              <input type="text" id="edit-dom" inputmode="numeric" placeholder="*" autocomplete="off" />
+            </label>
+            <label class="cron-field">
+              <span class="cron-field-label">月</span>
+              <select id="edit-month">
+                <option value="*">每</option>
+                <option value="1">1月</option>
+                <option value="2">2月</option>
+                <option value="3">3月</option>
+                <option value="4">4月</option>
+                <option value="5">5月</option>
+                <option value="6">6月</option>
+                <option value="7">7月</option>
+                <option value="8">8月</option>
+                <option value="9">9月</option>
+                <option value="10">10月</option>
+                <option value="11">11月</option>
+                <option value="12">12月</option>
+              </select>
+            </label>
+            <label class="cron-field">
+              <span class="cron-field-label">周</span>
+              <select id="edit-dow">
+                <option value="*">每</option>
+                <option value="0">周日</option>
+                <option value="1">周一</option>
+                <option value="2">周二</option>
+                <option value="3">周三</option>
+                <option value="4">周四</option>
+                <option value="5">周五</option>
+                <option value="6">周六</option>
+              </select>
+            </label>
+          </div>
+          <div class="cron-presets" id="cron-presets">
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 8 * * *">每天 08:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 0 * * *">每天 00:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 8 * * 1">每周一 08:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 18 * * 5">每周五 18:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 9 * * 1-5">工作日 09:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 8 1 * *">每月 1 日 08:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 12 15 * *">每月 15 日 12:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 0 1 1 *">1 月 1 日 00:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 9 1 6 *">6 月 1 日 09:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 8 25 12 *">12 月 25 日 08:00</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="*/5 * * * *">每 5 分钟</button>
+            <button type="button" class="btn btn-ghost btn-preset" data-preset="0 */2 * * *">每 2 小时</button>
+          </div>
+          <ul class="cron-examples">
+            <li><code>0 8 * * *</code> 每天 08:00</li>
+            <li><code>0 8 * * 1</code> 每周一 08:00</li>
+            <li><code>0 8 1 * *</code> 每月 1 日 08:00</li>
+            <li><code>0 0 1 1 *</code> 每年 1 月 1 日 00:00</li>
+            <li><code>0 9 * * 1-5</code> 周一到周五 09:00</li>
+            <li><code>*/15 * * * *</code> 每 15 分钟</li>
+          </ul>
+          <p class="form-hint">Linux cron 五段：<strong>分 时 日 月 周</strong>。<code>*</code> 任意；日 1–31，月 1–12，周 0=周日 … 6=周六。日/周同时指定时取交集。</p>
+          <p class="form-preview">当前表达式：<code id="edit-preview">—</code></p>
+        </fieldset>
+      </div>
+      <div class="panel-dialog-foot">
+        <button type="button" class="btn" id="btn-edit-cancel">取消</button>
+        <button type="submit" class="btn btn-primary" id="btn-edit-save">保存</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog class="log-dialog" id="log-dialog">
     <div class="log-dialog-head">
       <div class="log-dialog-title">
@@ -95,6 +178,6 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2"></script>
 </body>
 </html>

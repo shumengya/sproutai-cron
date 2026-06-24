@@ -1,0 +1,8 @@
+{
+  "runtime": "javascript",
+  "entry": "run.js",
+  "tags": [
+    "JavaScript",
+    "模板"
+  ]
+}

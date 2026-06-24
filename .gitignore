@@ -13,6 +13,10 @@ logs/
 *.lock
 *.log
 
+# 内置邮件 API 凭据（本地 .env 不上传）
+lib/vendor/mengya-mail-api/.env
+lib/vendor/mengya-mail-api/.env.*
+
 # 禁用任务目录（含本机专属脚本/凭据，不上传）
 .disabled/
 
@@ -27,3 +31,6 @@ smallmengya-gitea-repo-sync/*.lock
 .vscode/
 *.swp
 .DS_Store
+
+# MCP 本地虚拟环境
+mcp-server/.venv/

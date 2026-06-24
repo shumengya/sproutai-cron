@@ -11,7 +11,7 @@ import sys as _sys, pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1] / "lib"))
 del _sys, _pl
 
-from shumengya_cron.runner import (
+from runner import (
     TaskContext,
     acquire_cron_lock,
     task_is_disabled,

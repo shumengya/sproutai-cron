@@ -2,6 +2,7 @@ const API = "/api";
 const REFRESH_INTERVAL = 15000;
 
 const els = {
+  runtimes: document.getElementById("runtimes"),
   taskBody: document.getElementById("task-body"),
   taskCards: document.getElementById("task-cards"),
   stats: document.getElementById("stats"),
@@ -13,12 +14,25 @@ const els = {
   logTitle: document.getElementById("log-title"),
   logSubtitle: document.getElementById("log-subtitle"),
   logContent: document.getElementById("log-content"),
-  sidebar: document.getElementById("sidebar"),
-  overlay: document.getElementById("overlay"),
+  editDialog: document.getElementById("edit-dialog"),
+  editForm: document.getElementById("edit-form"),
+  editTitle: document.getElementById("edit-title"),
+  editDescription: document.getElementById("edit-description"),
+  editMinute: document.getElementById("edit-minute"),
+  editHour: document.getElementById("edit-hour"),
+  editDom: document.getElementById("edit-dom"),
+  editMonth: document.getElementById("edit-month"),
+  editDow: document.getElementById("edit-dow"),
+  editPreview: document.getElementById("edit-preview"),
+  cronPresets: document.getElementById("cron-presets"),
+  editTagListEl: document.getElementById("edit-tags"),
+  editTagInput: document.getElementById("edit-tag-input"),
 };
 
 let allTasks = [];
 let currentLogTaskId = null;
+let currentEditTaskId = null;
+let editTagList = [];
 let refreshTimer = null;
 
 const escapeHtml = (str) =>
@@ -61,19 +75,23 @@ async function api(path, options = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.detail || data.message || `请求失败 (${res.status})`);
+    const detail = data.detail;
+    const msg = Array.isArray(detail)
+      ? detail.map((d) => d.msg || d).join("; ")
+      : detail || data.message || `请求失败 (${res.status})`;
+    throw new Error(msg);
   }
   return data;
 }
 
 function statusMarkup(task) {
   if (task.running) {
-    return '<span class="status run"><span class="dot"></span>运行中</span>';
+    return '<span class="badge badge-run"><span class="dot"></span>运行中</span>';
   }
   if (task.enabled) {
-    return '<span class="status on"><span class="dot"></span>已开启</span>';
+    return '<span class="badge badge-on"><span class="dot"></span>已开启</span>';
   }
-  return '<span class="status off"><span class="dot"></span>已关闭</span>';
+  return '<span class="badge badge-off"><span class="dot"></span>已关闭</span>';
 }
 
 function scheduleMarkup(task) {
@@ -97,17 +115,151 @@ function actionButtons(task) {
     <div class="actions">
       <button type="button" class="btn ${toggleClass}" data-action="toggle" data-id="${escapeHtml(task.task_id)}">${toggleLabel}</button>
       <button type="button" class="btn" data-action="run" data-id="${escapeHtml(task.task_id)}" ${task.running ? "disabled" : ""}>运行</button>
+      <button type="button" class="btn" data-action="edit" data-id="${escapeHtml(task.task_id)}">修改</button>
       <button type="button" class="btn" data-action="sync" data-id="${escapeHtml(task.task_id)}">同步</button>
       <button type="button" class="btn" data-action="log" data-id="${escapeHtml(task.task_id)}">日志</button>
     </div>
   `;
 }
 
+const CRON_FIELD_KEYS = ["editMinute", "editHour", "editDom"];
+
+function parseCron(expr) {
+  const parts = (expr || "0 8 * * *").trim().split(/\s+/);
+  return {
+    minute: parts[0] ?? "0",
+    hour: parts[1] ?? "8",
+    dom: parts[2] ?? "*",
+    month: parts[3] ?? "*",
+    dow: parts[4] ?? "*",
+  };
+}
+
+const CRON_DOW_OPTIONS = [
+  ["*", "每"],
+  ["0", "周日"],
+  ["1", "周一"],
+  ["2", "周二"],
+  ["3", "周三"],
+  ["4", "周四"],
+  ["5", "周五"],
+  ["6", "周六"],
+];
+
+const CRON_MONTH_OPTIONS = [
+  ["*", "每"],
+  ...Array.from({ length: 12 }, (_, i) => [String(i + 1), `${i + 1}月`]),
+];
+
+function resetSelectOptions(selectEl, options, value) {
+  selectEl.innerHTML = options.map(
+    ([val, label]) => `<option value="${val}">${label}</option>`
+  ).join("");
+  if ([...selectEl.options].some((opt) => opt.value === value)) {
+    selectEl.value = value;
+    return;
+  }
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = value;
+  opt.selected = true;
+  selectEl.appendChild(opt);
+}
+
+function resetDowSelect(value) {
+  resetSelectOptions(els.editDow, CRON_DOW_OPTIONS, value);
+}
+
+function resetMonthSelect(value) {
+  resetSelectOptions(els.editMonth, CRON_MONTH_OPTIONS, value);
+}
+
+function fillCronForm(expr) {
+  const { minute, hour, dom, month, dow } = parseCron(expr);
+  els.editMinute.value = minute;
+  els.editHour.value = hour;
+  els.editDom.value = dom;
+  resetMonthSelect(month);
+  resetDowSelect(dow);
+}
+
+function buildScheduleFromForm() {
+  const values = CRON_FIELD_KEYS.map((key) => {
+    const raw = els[key].value.trim();
+    return raw === "" ? "*" : raw;
+  });
+  values.push(els.editMonth.value.trim() || "*");
+  values.push(els.editDow.value.trim() || "*");
+  return values.join(" ");
+}
+
+function updateEditPreview() {
+  try {
+    els.editPreview.textContent = buildScheduleFromForm() || "—";
+  } catch {
+    els.editPreview.textContent = "—";
+  }
+}
+
+const MAX_TASK_TAGS = 4;
+
+const RUNTIME_LABELS = {
+  python: "Python",
+  javascript: "JavaScript",
+  bash: "Bash",
+  powershell: "PowerShell",
+};
+
+function runtimeLabel(task) {
+  return RUNTIME_LABELS[task.runtime] || task.runtime || "Python";
+}
+
+function displayTags(task) {
+  const tags = Array.isArray(task.tags) ? task.tags.filter(Boolean) : [];
+  if (tags.length) return tags.slice(0, MAX_TASK_TAGS);
+  return [runtimeLabel(task)];
+}
+
+function tagsMarkup(task) {
+  return displayTags(task)
+    .map((tag) => `<span class="task-tag">${escapeHtml(tag)}</span>`)
+    .join("");
+}
+
 function nameMarkup(task) {
   return `
-    <div class="task-name">${escapeHtml(task.task_id)}</div>
+    <div class="task-name-row">
+      <span class="task-name">${escapeHtml(task.task_id)}</span>
+      ${tagsMarkup(task)}
+    </div>
     ${task.description ? `<div class="task-desc">${escapeHtml(task.description)}</div>` : ""}
   `;
+}
+
+function renderRuntimes(items) {
+  els.runtimes.innerHTML = items
+    .map((item) => {
+      const version = item.available
+        ? escapeHtml(item.version || "—")
+        : '<span class="runtime-missing">无</span>';
+      const stateClass = item.available ? "is-ok" : "is-missing";
+      return `
+        <div class="runtime-card ${stateClass}">
+          <span class="runtime-name">${escapeHtml(item.name)}</span>
+          <span class="runtime-version">${version}</span>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+async function loadRuntimes() {
+  try {
+    const items = await api("/runtimes");
+    renderRuntimes(items);
+  } catch {
+    els.runtimes.innerHTML = '<div class="runtime-card is-missing"><span class="runtime-name">运行时</span><span class="runtime-version"><span class="runtime-missing">检测失败</span></span></div>';
+  }
 }
 
 function renderStats(tasks) {
@@ -115,21 +267,21 @@ function renderStats(tasks) {
   const running = tasks.filter((t) => t.running).length;
   const off = tasks.length - enabled;
   els.stats.innerHTML = `
-    <div class="meta-item">
-      <span class="label">任务总数</span>
-      <span class="value">${tasks.length}</span>
+    <div class="stat-card">
+      <span class="stat-label">任务总数</span>
+      <span class="stat-value">${tasks.length}</span>
     </div>
-    <div class="meta-item is-accent">
-      <span class="label">已开启</span>
-      <span class="value">${enabled}</span>
+    <div class="stat-card stat-accent">
+      <span class="stat-label">已开启</span>
+      <span class="stat-value">${enabled}</span>
     </div>
-    <div class="meta-item">
-      <span class="label">已关闭</span>
-      <span class="value">${off}</span>
+    <div class="stat-card">
+      <span class="stat-label">已关闭</span>
+      <span class="stat-value">${off}</span>
     </div>
-    <div class="meta-item is-run">
-      <span class="label">运行中</span>
-      <span class="value">${running}</span>
+    <div class="stat-card stat-run">
+      <span class="stat-label">运行中</span>
+      <span class="stat-value">${running}</span>
     </div>
   `;
   els.summaryText.textContent = running
@@ -167,18 +319,18 @@ function renderTasks(tasks) {
           <div class="name">${nameMarkup(task)}</div>
           ${statusMarkup(task)}
         </div>
-        <div class="task-card-body">
-          <div>
+        <div class="task-card-meta">
+          <div class="meta-block">
             <span class="field-label">调度</span>
             ${scheduleMarkup(task)}
           </div>
-          <div>
+          <div class="meta-block">
             <span class="field-label">日志</span>
-            <span class="log-meta">${formatBytes(task.log_size)}</span>
-            <span class="log-meta muted">${task.log_updated ? escapeHtml(task.log_updated) : "无记录"}</span>
+            <div class="log-meta">${formatBytes(task.log_size)}</div>
+            <div class="log-meta muted">${task.log_updated ? escapeHtml(task.log_updated) : "无记录"}</div>
           </div>
         </div>
-        ${actionButtons(task)}
+        <div class="task-card-actions">${actionButtons(task)}</div>
       </article>
     `
     )
@@ -188,10 +340,14 @@ function renderTasks(tasks) {
 function applyFilter() {
   const q = els.filter.value.trim().toLowerCase();
   const filtered = q
-    ? allTasks.filter((t) =>
-        t.task_id.toLowerCase().includes(q) ||
-        (t.description || "").toLowerCase().includes(q)
-      )
+    ? allTasks.filter((t) => {
+        const tagText = displayTags(t).join(" ").toLowerCase();
+        return (
+          t.task_id.toLowerCase().includes(q) ||
+          (t.description || "").toLowerCase().includes(q) ||
+          tagText.includes(q)
+        );
+      })
     : allTasks;
   renderTasks(filtered);
 }
@@ -203,6 +359,7 @@ async function loadTasks() {
     renderStats(tasks);
     applyFilter();
     els.lastRefresh.textContent = `已刷新 ${nowText()}`;
+    await loadRuntimes();
   } catch (err) {
     els.taskBody.innerHTML = `<tr><td colspan="5" class="empty">${escapeHtml(err.message)}</td></tr>`;
     els.taskCards.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
@@ -215,6 +372,10 @@ async function handleAction(action, taskId) {
   try {
     if (action === "log") {
       await openLog(taskId);
+      return;
+    }
+    if (action === "edit") {
+      openEdit(taskId);
       return;
     }
     if (action === "run") {
@@ -256,6 +417,95 @@ async function refreshLog() {
   }
 }
 
+function renderEditTags() {
+  if (!els.editTagListEl) return;
+  els.editTagListEl.innerHTML = editTagList
+    .map(
+      (tag, index) => `
+      <span class="task-tag is-editable">
+        ${escapeHtml(tag)}
+        <button type="button" class="tag-remove" data-index="${index}" aria-label="移除 ${escapeHtml(tag)}">×</button>
+      </span>
+    `
+    )
+    .join("");
+  const atLimit = editTagList.length >= MAX_TASK_TAGS;
+  if (els.editTagInput) els.editTagInput.disabled = atLimit;
+  const addBtn = document.getElementById("btn-tag-add");
+  if (addBtn) addBtn.disabled = atLimit;
+}
+
+function addEditTag() {
+  if (!els.editTagInput) return;
+  const value = els.editTagInput.value.trim();
+  if (!value) return;
+  if (editTagList.length >= MAX_TASK_TAGS) {
+    showToast(`最多 ${MAX_TASK_TAGS} 个标签`, true);
+    return;
+  }
+  if (editTagList.includes(value)) {
+    showToast("标签已存在", true);
+    return;
+  }
+  editTagList.push(value);
+  els.editTagInput.value = "";
+  renderEditTags();
+}
+
+function removeEditTag(index) {
+  if (index < 0 || index >= editTagList.length) return;
+  editTagList.splice(index, 1);
+  renderEditTags();
+}
+
+function openEdit(taskId) {
+  const task = allTasks.find((t) => t.task_id === taskId);
+  if (!task) {
+    showToast("任务不存在", true);
+    return;
+  }
+
+  currentEditTaskId = taskId;
+  els.editTitle.textContent = taskId;
+  els.editDescription.value = task.description || "";
+  editTagList = [...displayTags(task)];
+  if (els.editTagInput) els.editTagInput.value = "";
+  renderEditTags();
+  fillCronForm(task.schedule || "0 8 * * *");
+  updateEditPreview();
+  els.editDialog.showModal();
+}
+
+async function saveEdit(event) {
+  event.preventDefault();
+  if (!currentEditTaskId) return;
+
+  const schedule = buildScheduleFromForm();
+  if (!schedule || schedule.split(/\s+/).length !== 5) {
+    showToast("请填写完整的分、时、日、月、周", true);
+    return;
+  }
+
+  try {
+    els.btnEditSave.disabled = true;
+    const res = await api(`/tasks/${encodeURIComponent(currentEditTaskId)}/schedule`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        description: els.editDescription.value.trim(),
+        schedule,
+        tags: editTagList,
+      }),
+    });
+    els.editDialog.close();
+    showToast(res.message || "已保存");
+    await loadTasks();
+  } catch (err) {
+    showToast(err.message, true);
+  } finally {
+    els.btnEditSave.disabled = false;
+  }
+}
+
 function bindActions(root) {
   root.addEventListener("click", (event) => {
     const btn = event.target.closest("[data-action]");
@@ -264,31 +514,53 @@ function bindActions(root) {
   });
 }
 
-function closeSidebar() {
-  els.sidebar.classList.remove("open");
-  els.overlay.hidden = true;
-}
-
-document.getElementById("btn-refresh").addEventListener("click", loadTasks);
 document.getElementById("btn-refresh-top").addEventListener("click", loadTasks);
 document.getElementById("btn-log-refresh").addEventListener("click", refreshLog);
 document.getElementById("btn-log-close").addEventListener("click", () => els.logDialog.close());
-els.filter.addEventListener("input", applyFilter);
-
-document.getElementById("menu-toggle").addEventListener("click", () => {
-  els.sidebar.classList.add("open");
-  els.overlay.hidden = false;
+document.getElementById("btn-edit-close").addEventListener("click", () => els.editDialog.close());
+document.getElementById("btn-edit-cancel").addEventListener("click", () => els.editDialog.close());
+els.editForm.addEventListener("submit", saveEdit);
+els.editForm.addEventListener("click", (event) => {
+  if (event.target.closest("#btn-tag-add")) {
+    event.preventDefault();
+    addEditTag();
+    return;
+  }
+  const removeBtn = event.target.closest(".tag-remove");
+  if (removeBtn) {
+    event.preventDefault();
+    removeEditTag(Number(removeBtn.dataset.index));
+  }
 });
-els.overlay.addEventListener("click", closeSidebar);
+els.editForm.addEventListener("keydown", (event) => {
+  if (event.target !== els.editTagInput || event.key !== "Enter") return;
+  event.preventDefault();
+  addEditTag();
+});
+CRON_FIELD_KEYS.forEach((key) => els[key].addEventListener("input", updateEditPreview));
+els.editMonth.addEventListener("change", updateEditPreview);
+els.editDow.addEventListener("change", updateEditPreview);
+els.cronPresets.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-preset]");
+  if (!btn) return;
+  fillCronForm(btn.dataset.preset);
+  updateEditPreview();
+});
+els.btnEditSave = document.getElementById("btn-edit-save");
+els.filter.addEventListener("input", applyFilter);
 
 els.logDialog.addEventListener("click", (event) => {
   if (event.target === els.logDialog) els.logDialog.close();
+});
+els.editDialog.addEventListener("click", (event) => {
+  if (event.target === els.editDialog) els.editDialog.close();
 });
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     if (els.logDialog.open) els.logDialog.close();
-    else if (els.sidebar.classList.contains("open")) closeSidebar();
+    else if (els.editDialog.open) els.editDialog.close();
+    return;
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();

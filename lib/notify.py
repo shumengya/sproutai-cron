@@ -1,23 +1,35 @@
 """
 飞书 / Lark Markdown 通知 + 任务结果汇总。
+内置 lark-notice-api 与 mengya-mail-api，无需外部 subprocess。
 """
 
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
-    from shumengya_cron.runner import TaskContext
+    from runner import TaskContext
 
 CRON_FEISHU_WEBHOOK_DEFAULT = (
     ""
 )
-CRON_LARK_NOTICE_API_SRC_DEFAULT = "/shumengya/project/python/lark-notice-api/src"
+
+_VENDOR_ROOT = Path(__file__).resolve().parent / "vendor"
+_LARK_SRC = _VENDOR_ROOT / "lark-notice-api" / "src"
+_MAIL_SRC = _VENDOR_ROOT / "mengya-mail-api" / "src"
+_MAIL_ENV_DEFAULT = _VENDOR_ROOT / "mengya-mail-api" / ".env"
+
+
+def _ensure_vendor_imports() -> None:
+    for src in (_LARK_SRC, _MAIL_SRC):
+        text = str(src)
+        if src.is_dir() and text not in sys.path:
+            sys.path.insert(0, text)
 
 
 @dataclass
@@ -76,11 +88,8 @@ def send_task_summary(
     log: Callable[[str], None],
     extra_fields: list[tuple[str, object]] | None = None,
 ) -> None:
-    """发送标准任务汇总通知（飞书 + 邮件降级）。
-
-    extra_fields 会插入在 结束时间 和 总数 之间，适合放主机名、目标路径等任务特有字段。
-    """
-    from shumengya_cron.runner import task_output_prefix
+    """发送标准任务汇总通知（飞书 + 邮件降级）。"""
+    from runner import task_output_prefix
 
     end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     subject = f"{task_output_prefix(ctx.task_id)} {result.status_cn} {end_time}"
@@ -114,95 +123,61 @@ def send_feishu_markdown(
     *,
     log: Callable[[str], None],
 ) -> None:
-    """发送飞书 Markdown（失败时自动降级为邮件通知，邮件也失败则结束）。"""
+    """发送飞书 Markdown（失败时自动降级为邮件通知）。"""
     if not title or not markdown:
         log("飞书通知内容为空，跳过。")
         return
 
     webhook = os.environ.get("LARK_NOTICE_WEBHOOK", CRON_FEISHU_WEBHOOK_DEFAULT)
-    api_src = os.environ.get("LARK_NOTICE_API_SRC", CRON_LARK_NOTICE_API_SRC_DEFAULT)
     if not webhook:
         log("未配置飞书 webhook，跳过飞书通知。")
         return
 
-    env = os.environ.copy()
-    pp = api_src
-    if env.get("PYTHONPATH"):
-        pp = f"{api_src}:{env['PYTHONPATH']}"
-    env["PYTHONPATH"] = pp
+    _ensure_vendor_imports()
+    from lark_notice_api.client import LarkNoticeError, LarkWebhookClient
 
-    feishu_ok = False
     try:
-        r = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "lark_notice_api",
-                "--webhook",
-                webhook,
-                "send-markdown",
-                "--title",
-                title,
-                "--markdown",
-                markdown,
-            ],
-            cwd=api_src if os.path.isdir(api_src) else None,
-            env=env,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if r.returncode == 0:
-            feishu_ok = True
-        else:
-            detail = (r.stderr or r.stdout or "").strip()
-            if detail:
-                log(f"发送飞书通知失败（退出码 {r.returncode}）：{detail}")
-            else:
-                log(f"发送飞书通知失败（退出码 {r.returncode}）。")
-    except OSError:
-        log("发送飞书通知失败：lark-notice-api 调用异常。")
-
-    if feishu_ok:
+        LarkWebhookClient(webhook).send_markdown(title, markdown)
         return
+    except LarkNoticeError as exc:
+        log(f"发送飞书通知失败：{exc}")
+    except ImportError:
+        log("发送飞书通知失败：内置 lark-notice-api 不可用。")
 
     log("飞书通知失败，尝试通过邮件发送…")
     _send_mail_fallback(title, markdown, log)
 
 
-# ── 邮件降级 ──────────────────────────────────────────────
-
-_MAIL_SCRIPT_DEFAULT = "/shumengya/project/skills/mengya-mail-skills/scripts/mengya-mail-api.py"
-_MAIL_ENV_FILE_DEFAULT = "/shumengya/project/python/mengya-mail-api/.env"
-
-
 def _send_mail_fallback(title: str, markdown: str, log: Callable[[str], None]) -> None:
-    """通过 mengya-mail-api 发送报告邮件（失败仅记日志，不再继续降级）。"""
+    """通过内置 mengya-mail-api 发送邮件（失败仅记日志）。"""
     enabled = os.environ.get("CRON_MAIL_ENABLED", "0")
     if enabled != "1":
         log("邮件通知未开启（export CRON_MAIL_ENABLED=1 可启用），跳过。")
         return
 
-    script = os.environ.get("MAIL_API_SCRIPT", _MAIL_SCRIPT_DEFAULT)
-    env_file = os.environ.get("MAIL_API_ENV_FILE", _MAIL_ENV_FILE_DEFAULT)
+    env_file = os.environ.get("MAIL_API_ENV_FILE", str(_MAIL_ENV_DEFAULT))
+    if env_file and os.path.isfile(env_file):
+        os.environ.setdefault("MENGYA_MAIL_ENV_FILE", env_file)
+
     mail_to = os.environ.get("MAIL_TO", "mail@smyhub.com")
     from_name = os.environ.get("MAIL_FROM_NAME", "cron")
 
-    if not os.path.isfile(script):
-        log(f"邮件脚本不存在：{script}，跳过邮件通知。")
-        return
+    _ensure_vendor_imports()
+    from mengya_mail_api.config import ConfigError, MailConfig
+    from mengya_mail_api.email_client import MailClient, MailClientError
 
     try:
-        r = subprocess.run(
-            [sys.executable, script, "--env-file", env_file, "--format", "json",
-             "send-email", "--to", mail_to, "--subject", title,
-             "--from-name", from_name, "--html-body", markdown],
-            capture_output=True, text=True, check=False,
+        config = MailConfig.from_env()
+        MailClient(config).send_email(
+            to=mail_to,
+            subject=title,
+            html_body=markdown,
+            from_name=from_name,
         )
-        if r.returncode == 0:
-            log("邮件通知发送成功。")
-        else:
-            detail = (r.stderr or r.stdout or "").strip()
-            log(f"邮件通知发送失败（退出码 {r.returncode}）：{detail or '无详细信息'}")
-    except OSError as exc:
-        log(f"邮件通知发送异常：{exc}")
+        log("邮件通知发送成功。")
+    except ConfigError as exc:
+        log(f"邮件配置错误：{exc}")
+    except MailClientError as exc:
+        log(f"邮件通知发送失败：{exc}")
+    except ImportError:
+        log("邮件通知发送失败：内置 mengya-mail-api 不可用。")

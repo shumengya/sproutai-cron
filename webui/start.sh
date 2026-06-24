@@ -13,4 +13,5 @@ fi
 HOST="${SPROUTCLAW_CRON_WEB_HOST:-0.0.0.0}"
 PORT="${SPROUTCLAW_CRON_WEB_PORT:-8765}"
 
-exec "$VENV/bin/uvicorn" main:app --app-dir "$BACKEND" --host "$HOST" --port "$PORT"
+exec "$VENV/bin/uvicorn" main:app --app-dir "$BACKEND" --host "$HOST" --port "$PORT" \
+  --reload --reload-dir "$BACKEND" --reload-dir "$ROOT/lib"
