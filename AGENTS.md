@@ -1,38 +1,62 @@
-# sproutclaw-cron 开发规则
+# sproutai-cron 开发规则
+
+## 控制面（Go 单二进制）
+
+调度与管理由 **Go 编译的 `cronctl`** 完成（**不再依赖 Python 控制面**）：
+
+```bash
+# 编译（前端 go:embed 进二进制）
+# 整包：在 sproutai 根目录 node build.mjs
+# 仅本仓：go build -o cronctl.exe ./cmd/cronctl
+# 产物也可在 dist/windows-amd64/cronctl.exe  dist/linux-amd64/cronctl
+
+cronctl serve    # 常驻调度
+cronctl web      # WebUI（Gin，嵌入式前端，默认同启 serve）
+```
+
+**不使用** 系统 cron.d / 任务计划。`schedule.cron` 支持现代化 DSL（秒级）：
+
+| 写法 | 含义 |
+|------|------|
+| `0 8 * * *` | 经典五段 cron（分 时 日 月 周） |
+| `*/10 * * * * *` | 六段（含秒） |
+| `@every 10s` | 固定间隔 |
+| `@random 1s 60s` / `@random 30m 3h` | 随机间隔 |
+| `@on 12-25 00:00` | 每年固定日 |
+| `@holiday christmas` / `@holiday cn-national-day` | 节日别名 |
+| `@weekly mon 10:00` / `@monthly 1 00:00` | 语法糖 |
+
+调度由 `cronctl serve` / `web` **秒级**到点触发（非系统 cron）。
 
 ## 新建定时任务
 
-**默认从 `_template/`（Python）复制**；也可选用其他语言模板：
+**所有任务与模板均在 `cron-tasks/` 下。** 默认从 `cron-tasks/template-python/` 复制：
 
 | 模板目录 | 语言 | 入口 |
 |---|---|---|
-| `_template` | Python（默认） | `run.py` |
-| `_template-javascript` | JavaScript | `run.js` |
-| `_template-bash` | Bash | `run.sh` |
-| `_template-powershell` | PowerShell | `run.ps1` |
+| `cron-tasks/template-python` | Python（默认） | `run.py` |
+| `cron-tasks/template-javascript` | JavaScript | `run.js` |
+| `cron-tasks/template-bash` | Bash | `run.sh` |
+| `cron-tasks/template-powershell` | PowerShell | `run.ps1` |
+
+推荐：
 
 ```bash
-TASK_ID="<主机名>-<功能描述>"
-CRON_ROOT="/shumengya/project/agent/sproutclaw-cron"
-TEMPLATE="_template"   # 或 _template-javascript / _template-bash / _template-powershell
-
-cp -a "$CRON_ROOT/$TEMPLATE" "$CRON_ROOT/$TASK_ID"
-sed -i "s/$TEMPLATE/$TASK_ID/g" "$CRON_ROOT/$TASK_ID/schedule.cron"
-# Bash 模板额外：chmod +x "$CRON_ROOT/$TASK_ID/run.sh"
+cronctl create <主机名>-<功能描述> --runtime python
+# 编辑入口与 schedule.cron
+cronctl run <task-id>
+cronctl enable <task-id>   # 用户要求时再开；须已运行 serve
 ```
 
 然后：
 
-1. **Python**：修改 `run.py`，保留 `task_is_disabled` / `task_logging` / `acquire_cron_lock` 结构
-2. **其他语言**：只改入口脚本（`run.js` / `run.sh` / `run.ps1`）；disable / 锁 / 日志由 `cronctl run` 统一处理
-3. 修改 `schedule.cron`：调整 cron 表达式与注释说明
-4. 可选：任务专属 JSON 配置（如 `targets.json`）
-5. 用 `python3 cronctl.py run <task-id>` 试跑，确认日志正常
-6. 默认保持关闭；用户要求启用时再 `cronctl enable <task-id>`
+1. **任意语言**：只写业务逻辑；**禁用 / 锁 / 日志由 `cronctl run` / serve 统一处理**
+2. 脚本 stdout/stderr 会进入 `logs/<task-id>.log`
+3. 环境变量：`CRON_TASK_ID` / `CRON_TASK_DIR` / `CRON_ROOT`
+4. 改 `schedule.cron`（cron 或 `@every` / `@random` 等）
+5. `cronctl run` 试跑 → 默认保持禁用 → 用户要求再 `enable`
 
 ## task.json
-
-可选清单，声明运行时与入口（无则按入口文件自动推断）：
 
 ```json
 {
@@ -41,38 +65,40 @@ sed -i "s/$TEMPLATE/$TASK_ID/g" "$CRON_ROOT/$TASK_ID/schedule.cron"
 }
 ```
 
-`runtime` 取值：`python` | `javascript` | `bash` | `powershell`
+`runtime`：`python` | `javascript` | `bash` | `powershell`
+
+> 若任务脚本为 Python，本机仍需安装 Python 解释器；控制面本身不需要 Python。
 
 ## 不要修改
 
-- `_template*` 是 hello world 示例任务，也是新任务复制源；除非用户要求，不要改其示例行为
-- 不要删除或移动已有任务的 `schedule.cron` 里对 `cronctl.py run` 的调用方式
+- `template*` 示例与复制源；除非用户要求
+- 不要改成依赖系统 cron.d / schtasks
 
 ## 任务目录约定
 
 ```
-<task-id>/
-├── task.json          # 可选：runtime + entry
-├── run.py|run.js|run.sh|run.ps1
-├── schedule.cron
-├── logs/<task-id>.log
-└── *.json             # 可选配置
+cron-tasks/
+├── <task-id>/
+│   ├── task.json
+│   ├── run.py|run.js|run.sh|run.ps1
+│   ├── schedule.cron      # 五段 cron + 注释
+│   └── logs/<task-id>.log
+└── .disabled/
+    └── <task-id>/
 ```
-
-禁用任务位于 `.disabled/<task-id>/`，开关用 `cronctl enable|disable|toggle`。
 
 ## 管理命令
 
 ```bash
-python3 /shumengya/project/agent/sproutclaw-cron/cronctl.py status
-python3 /shumengya/project/agent/sproutclaw-cron/cronctl.py run <task-id>
-python3 /shumengya/project/agent/sproutclaw-cron/cronctl.py enable <task-id>
+cronctl serve
+cronctl status
+cronctl run <task-id>
+cronctl enable <task-id>
+cronctl web
 ```
 
-WebUI：`/shumengya/project/agent/sproutclaw-cron/webui/start.sh` 或 Windows 下 `start-webui.bat`
+WebUI：`cronctl web`（静态资源已嵌入二进制）
 
 ## AI Agent 集成
 
-- **Skill**：`.cursor/skills/sproutclaw-cron/SKILL.md` — 操作规范与 workflow
-- **MCP**：`.cursor/mcp.json` 注册 `sproutclaw-cron` 服务器；工具前缀 `cron_*`
-- MCP 依赖：`pip install -r mcp-server/requirements.txt`
+- **Skill**：`skills/sproutai-cron/SKILL.md` — 通过全局 `cronctl` 管理

@@ -13,17 +13,34 @@ logs/
 *.lock
 *.log
 
-# 内置邮件 API 凭据（本地 .env 不上传）
-lib/vendor/mengya-mail-api/.env
-lib/vendor/mengya-mail-api/.env.*
+# 邮件凭据
+lib/mail.env
+lib/mail.env.*
+config/mail.env
+mail.env
+
+# Go build artifacts (dist/ 由 build 脚本生成，可提交或忽略按需)
+cronctl.exe
+cronctl.bin
+bin/
+*.test
+# 预编译二进制不入库（保留 dist/README.md 说明）
+dist/**/cronctl
+dist/**/*.exe
 
 # 禁用任务目录（含本机专属脚本/凭据，不上传）
 .disabled/
+cron-tasks/.disabled/
 
-# 本地任务运行产物
+# 本地任务运行产物（历史路径 + 新路径）
 smallmengya-gitea-repo-sync/__pycache__/
 smallmengya-gitea-repo-sync/logs/
 smallmengya-gitea-repo-sync/*.lock
+cron-tasks/**/__pycache__/
+cron-tasks/**/logs/
+cron-tasks/**/*.lock
+cron-tasks/.sprout-cron.serve.pid
+cron-tasks/.sprout-cron.serve.lock
 
 # 编辑器 / IDE / 工具
 .claude/
@@ -32,5 +49,5 @@ smallmengya-gitea-repo-sync/*.lock
 *.swp
 .DS_Store
 
-# MCP 本地虚拟环境
-mcp-server/.venv/
+# 本地 Cursor Skill 链接（可选，运行 AI/scripts/link-cursor-skills.*）
+.cursor/skills/

@@ -1,0 +1,5 @@
+{
+  "runtime": "python",
+  "entry": "run.py",
+  "tags": ["Python", "地震", "数据采集"]
+}

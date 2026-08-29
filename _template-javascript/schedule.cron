@@ -1,8 +1,0 @@
-SHELL=/bin/bash
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-HOME=/root
-CRON_MAIL_ENABLED=1
-
-# 每天 08:00 JavaScript hello world 示例（Node.js）
-# 开关：python3 /shumengya/project/agent/sproutclaw-cron/cronctl.py enable|disable|toggle _template-javascript
-0 8 * * * root /usr/bin/python3 /shumengya/project/agent/sproutclaw-cron/cronctl.py run _template-javascript >/dev/null 2>&1

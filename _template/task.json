@@ -1,8 +1,0 @@
-{
-  "runtime": "python",
-  "entry": "run.py",
-  "tags": [
-    "Python",
-    "模板"
-  ]
-}

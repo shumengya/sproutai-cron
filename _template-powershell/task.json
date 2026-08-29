@@ -1,8 +1,0 @@
-{
-  "runtime": "powershell",
-  "entry": "run.ps1",
-  "tags": [
-    "PowerShell",
-    "模板"
-  ]
-}

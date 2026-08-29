@@ -1,4 +1,27 @@
-const API = "/api";
+// 与 index.html 中 window.__CRON_BASE__ 一致：独立启动 ""，网关反代 "/cron"
+function detectBase() {
+  if (typeof window !== "undefined" && typeof window.__CRON_BASE__ === "string") {
+    return window.__CRON_BASE__;
+  }
+  try {
+    const scripts = document.getElementsByTagName("script");
+    for (let i = scripts.length - 1; i >= 0; i -= 1) {
+      const src = scripts[i].src || "";
+      if (!src) continue;
+      const u = new URL(src, location.href);
+      const m = u.pathname.match(/^(.*)\/static\/app\.js$/);
+      if (m) return m[1];
+    }
+  } catch {
+    // ignore
+  }
+  const p = location.pathname || "/";
+  if (p === "/cron" || p.startsWith("/cron/")) return "/cron";
+  return "";
+}
+
+const BASE = detectBase();
+const API = `${BASE}/api`;
 const REFRESH_INTERVAL = 15000;
 
 const els = {
@@ -18,11 +41,7 @@ const els = {
   editForm: document.getElementById("edit-form"),
   editTitle: document.getElementById("edit-title"),
   editDescription: document.getElementById("edit-description"),
-  editMinute: document.getElementById("edit-minute"),
-  editHour: document.getElementById("edit-hour"),
-  editDom: document.getElementById("edit-dom"),
-  editMonth: document.getElementById("edit-month"),
-  editDow: document.getElementById("edit-dow"),
+  editScheduleExpr: document.getElementById("edit-schedule-expr"),
   editPreview: document.getElementById("edit-preview"),
   cronPresets: document.getElementById("cron-presets"),
   editTagListEl: document.getElementById("edit-tags"),
@@ -34,6 +53,48 @@ let currentLogTaskId = null;
 let currentEditTaskId = null;
 let editTagList = [];
 let refreshTimer = null;
+let openModalCount = 0;
+
+function lockBodyScroll() {
+  openModalCount += 1;
+  document.body.classList.add("modal-open");
+}
+
+function unlockBodyScroll() {
+  openModalCount = Math.max(0, openModalCount - 1);
+  if (openModalCount === 0) {
+    document.body.classList.remove("modal-open");
+  }
+}
+
+function openModalDialog(dialog) {
+  if (!dialog) return;
+  if (dialog.open) return;
+
+  if (typeof dialog.showModal === "function") {
+    try {
+      dialog.showModal();
+      lockBodyScroll();
+      return;
+    } catch {
+      // showModal may fail when already open or on some mobile browsers.
+    }
+  }
+
+  dialog.setAttribute("open", "");
+  lockBodyScroll();
+}
+
+function closeModalDialog(dialog) {
+  if (!dialog || !dialog.open) return;
+
+  if (typeof dialog.close === "function") {
+    dialog.close();
+  } else {
+    dialog.removeAttribute("open");
+  }
+  unlockBodyScroll();
+}
 
 const escapeHtml = (str) =>
   String(str ?? "").replace(/[&<>"']/g, (c) => ({
@@ -95,9 +156,11 @@ function statusMarkup(task) {
 }
 
 function scheduleMarkup(task) {
-  return task.schedule
-    ? `<span class="schedule-code">${escapeHtml(task.schedule)}</span>`
-    : '<span class="mono">—</span>';
+  if (!task.schedule) return '<span class="mono">—</span>';
+  const next = task.next_run_at
+    ? `<div class="muted" title="下次执行">下次 ${escapeHtml(task.next_run_at)}</div>`
+    : "";
+  return `<span class="schedule-code">${escapeHtml(task.schedule)}</span>${next}`;
 }
 
 function logMarkup(task) {
@@ -116,81 +179,19 @@ function actionButtons(task) {
       <button type="button" class="btn ${toggleClass}" data-action="toggle" data-id="${escapeHtml(task.task_id)}">${toggleLabel}</button>
       <button type="button" class="btn" data-action="run" data-id="${escapeHtml(task.task_id)}" ${task.running ? "disabled" : ""}>运行</button>
       <button type="button" class="btn" data-action="edit" data-id="${escapeHtml(task.task_id)}">修改</button>
-      <button type="button" class="btn" data-action="sync" data-id="${escapeHtml(task.task_id)}">同步</button>
       <button type="button" class="btn" data-action="log" data-id="${escapeHtml(task.task_id)}">日志</button>
     </div>
   `;
 }
 
-const CRON_FIELD_KEYS = ["editMinute", "editHour", "editDom"];
-
-function parseCron(expr) {
-  const parts = (expr || "0 8 * * *").trim().split(/\s+/);
-  return {
-    minute: parts[0] ?? "0",
-    hour: parts[1] ?? "8",
-    dom: parts[2] ?? "*",
-    month: parts[3] ?? "*",
-    dow: parts[4] ?? "*",
-  };
-}
-
-const CRON_DOW_OPTIONS = [
-  ["*", "每"],
-  ["0", "周日"],
-  ["1", "周一"],
-  ["2", "周二"],
-  ["3", "周三"],
-  ["4", "周四"],
-  ["5", "周五"],
-  ["6", "周六"],
-];
-
-const CRON_MONTH_OPTIONS = [
-  ["*", "每"],
-  ...Array.from({ length: 12 }, (_, i) => [String(i + 1), `${i + 1}月`]),
-];
-
-function resetSelectOptions(selectEl, options, value) {
-  selectEl.innerHTML = options.map(
-    ([val, label]) => `<option value="${val}">${label}</option>`
-  ).join("");
-  if ([...selectEl.options].some((opt) => opt.value === value)) {
-    selectEl.value = value;
-    return;
+function fillScheduleForm(expr) {
+  if (els.editScheduleExpr) {
+    els.editScheduleExpr.value = (expr || "0 8 * * *").trim();
   }
-  const opt = document.createElement("option");
-  opt.value = value;
-  opt.textContent = value;
-  opt.selected = true;
-  selectEl.appendChild(opt);
-}
-
-function resetDowSelect(value) {
-  resetSelectOptions(els.editDow, CRON_DOW_OPTIONS, value);
-}
-
-function resetMonthSelect(value) {
-  resetSelectOptions(els.editMonth, CRON_MONTH_OPTIONS, value);
-}
-
-function fillCronForm(expr) {
-  const { minute, hour, dom, month, dow } = parseCron(expr);
-  els.editMinute.value = minute;
-  els.editHour.value = hour;
-  els.editDom.value = dom;
-  resetMonthSelect(month);
-  resetDowSelect(dow);
 }
 
 function buildScheduleFromForm() {
-  const values = CRON_FIELD_KEYS.map((key) => {
-    const raw = els[key].value.trim();
-    return raw === "" ? "*" : raw;
-  });
-  values.push(els.editMonth.value.trim() || "*");
-  values.push(els.editDow.value.trim() || "*");
-  return values.join(" ");
+  return (els.editScheduleExpr?.value || "").trim();
 }
 
 function updateEditPreview() {
@@ -381,9 +382,6 @@ async function handleAction(action, taskId) {
     if (action === "run") {
       const res = await api(`/tasks/${encodeURIComponent(taskId)}/run`, { method: "POST" });
       showToast(res.ok === false ? res.message : `已启动 ${taskId}`);
-    } else if (action === "sync") {
-      const res = await api(`/tasks/${encodeURIComponent(taskId)}/sync-cron`, { method: "POST" });
-      showToast(res.message || `已同步 ${taskId} 的 cron`);
     } else if (action === "toggle") {
       await api(`/tasks/${encodeURIComponent(taskId)}/toggle`, { method: "POST" });
       showToast(`已切换 ${taskId} 状态`);
@@ -399,7 +397,7 @@ async function openLog(taskId) {
   els.logTitle.textContent = taskId;
   els.logSubtitle.textContent = "加载日志…";
   els.logContent.textContent = "";
-  els.logDialog.showModal();
+  openModalDialog(els.logDialog);
   await refreshLog();
 }
 
@@ -471,9 +469,9 @@ function openEdit(taskId) {
   editTagList = [...displayTags(task)];
   if (els.editTagInput) els.editTagInput.value = "";
   renderEditTags();
-  fillCronForm(task.schedule || "0 8 * * *");
+  fillScheduleForm(task.schedule || "0 8 * * *");
   updateEditPreview();
-  els.editDialog.showModal();
+  openModalDialog(els.editDialog);
 }
 
 async function saveEdit(event) {
@@ -481,8 +479,8 @@ async function saveEdit(event) {
   if (!currentEditTaskId) return;
 
   const schedule = buildScheduleFromForm();
-  if (!schedule || schedule.split(/\s+/).length !== 5) {
-    showToast("请填写完整的分、时、日、月、周", true);
+  if (!schedule) {
+    showToast("请填写调度表达式", true);
     return;
   }
 
@@ -496,7 +494,7 @@ async function saveEdit(event) {
         tags: editTagList,
       }),
     });
-    els.editDialog.close();
+    closeModalDialog(els.editDialog);
     showToast(res.message || "已保存");
     await loadTasks();
   } catch (err) {
@@ -516,9 +514,9 @@ function bindActions(root) {
 
 document.getElementById("btn-refresh-top").addEventListener("click", loadTasks);
 document.getElementById("btn-log-refresh").addEventListener("click", refreshLog);
-document.getElementById("btn-log-close").addEventListener("click", () => els.logDialog.close());
-document.getElementById("btn-edit-close").addEventListener("click", () => els.editDialog.close());
-document.getElementById("btn-edit-cancel").addEventListener("click", () => els.editDialog.close());
+document.getElementById("btn-log-close").addEventListener("click", () => closeModalDialog(els.logDialog));
+document.getElementById("btn-edit-close").addEventListener("click", () => closeModalDialog(els.editDialog));
+document.getElementById("btn-edit-cancel").addEventListener("click", () => closeModalDialog(els.editDialog));
 els.editForm.addEventListener("submit", saveEdit);
 els.editForm.addEventListener("click", (event) => {
   if (event.target.closest("#btn-tag-add")) {
@@ -537,29 +535,29 @@ els.editForm.addEventListener("keydown", (event) => {
   event.preventDefault();
   addEditTag();
 });
-CRON_FIELD_KEYS.forEach((key) => els[key].addEventListener("input", updateEditPreview));
-els.editMonth.addEventListener("change", updateEditPreview);
-els.editDow.addEventListener("change", updateEditPreview);
+if (els.editScheduleExpr) {
+  els.editScheduleExpr.addEventListener("input", updateEditPreview);
+}
 els.cronPresets.addEventListener("click", (event) => {
   const btn = event.target.closest("[data-preset]");
   if (!btn) return;
-  fillCronForm(btn.dataset.preset);
+  fillScheduleForm(btn.dataset.preset);
   updateEditPreview();
 });
 els.btnEditSave = document.getElementById("btn-edit-save");
 els.filter.addEventListener("input", applyFilter);
 
 els.logDialog.addEventListener("click", (event) => {
-  if (event.target === els.logDialog) els.logDialog.close();
+  if (event.target === els.logDialog) closeModalDialog(els.logDialog);
 });
 els.editDialog.addEventListener("click", (event) => {
-  if (event.target === els.editDialog) els.editDialog.close();
+  if (event.target === els.editDialog) closeModalDialog(els.editDialog);
 });
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    if (els.logDialog.open) els.logDialog.close();
-    else if (els.editDialog.open) els.editDialog.close();
+    if (els.logDialog.open) closeModalDialog(els.logDialog);
+    else if (els.editDialog.open) closeModalDialog(els.editDialog);
     return;
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {

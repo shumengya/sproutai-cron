@@ -1,0 +1,5 @@
+{
+  "runtime": "python",
+  "entry": "run.py",
+  "tags": ["Python", "AI", "早报"]
+}
