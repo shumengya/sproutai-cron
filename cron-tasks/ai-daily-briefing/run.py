@@ -29,11 +29,6 @@ ALLOW_YESTERDAY = os.environ.get("AI_DAILY_ALLOW_YESTERDAY", "0").strip() == "1"
 MODE = os.environ.get("AI_DAILY_MODE", "full").strip().lower()
 MAX_CHARS = int(os.environ.get("AI_DAILY_MAX_CHARS", "12000"))
 USER_AGENT = os.environ.get("AI_DAILY_UA", "sproutai-cron/ai-daily-briefing")
-DEFAULT_WEBHOOK = (
-    ""
-)
-
-
 def log(msg: str) -> None:
     print(msg, flush=True)
 
@@ -42,7 +37,7 @@ def send_feishu_markdown(title: str, markdown: str, *, log: Callable[[str], None
     if not title or not markdown:
         log("飞书通知内容为空，跳过。")
         return
-    webhook = os.environ.get("LARK_NOTICE_WEBHOOK", DEFAULT_WEBHOOK)
+    webhook = os.environ.get("LARK_NOTICE_WEBHOOK")
     if not webhook:
         log("未配置飞书 webhook，跳过飞书通知。")
         return

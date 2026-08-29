@@ -22,11 +22,6 @@ CEIC_DATA_URL = os.environ.get(
 )
 LOOKBACK_HOURS = int(os.environ.get("CEIC_LOOKBACK_HOURS", "24"))
 MAX_ITEMS = int(os.environ.get("CEIC_MAX_ITEMS", "20"))
-DEFAULT_WEBHOOK = (
-    ""
-)
-
-
 @dataclass
 class TaskResult:
     ok: list[str] = field(default_factory=list)
@@ -63,7 +58,7 @@ def send_feishu_markdown(title: str, markdown: str) -> None:
     if not title or not markdown:
         log("飞书通知内容为空，跳过。")
         return
-    webhook = os.environ.get("LARK_NOTICE_WEBHOOK", DEFAULT_WEBHOOK)
+    webhook = os.environ.get("LARK_NOTICE_WEBHOOK")
     if not webhook:
         log("未配置飞书 webhook，跳过飞书通知。")
         return

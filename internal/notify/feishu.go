@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-const defaultWebhook = ""
-
 // SendMarkdown posts an interactive card with markdown body.
 func SendMarkdown(title, markdown string) error {
 	if title == "" || markdown == "" {
@@ -20,10 +18,7 @@ func SendMarkdown(title, markdown string) error {
 	}
 	webhook := os.Getenv("LARK_NOTICE_WEBHOOK")
 	if webhook == "" {
-		webhook = defaultWebhook
-	}
-	if webhook == "" {
-		return fmt.Errorf("未配置飞书 webhook")
+		return fmt.Errorf("未配置飞书 webhook（请设置 LARK_NOTICE_WEBHOOK）")
 	}
 	text := bytes.ReplaceAll([]byte(markdown), []byte("\r\n"), []byte("\n"))
 	text = bytes.ReplaceAll(text, []byte("\r"), []byte("\n"))
